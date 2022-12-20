@@ -1,41 +1,42 @@
-package main
+package noiseconn
 
 import (
+	"bytes"
 	"crypto/rand"
-	"fmt"
 	"net"
+	"testing"
 
 	"github.com/flynn/noise"
-	"golang.org/x/exp/constraints"
 	"golang.org/x/sync/errgroup"
 )
 
-type Conn struct {
-	net.Conn
-	hs         *noise.HandshakeState
-	send, recv *noise.CipherState
-}
-
-func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
-	hs, err := noise.NewHandshakeState(config)
+func netPipe() (net.Conn, net.Conn, error) {
+	var eg errgroup.Group
+	var client, server net.Conn
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &Conn{Conn: conn, hs: hs}, nil
+	defer l.Close()
+	eg.Go(func() error {
+		var err error
+		server, err = l.Accept()
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		client, err = net.Dial(l.Addr().Network(), l.Addr().String())
+		return err
+	})
+	err = eg.Wait()
+	return client, server, err
 }
 
-func (c *Conn) Read(b []byte) (n int, err error) {
-
-	return c.Conn.Read(b)
-}
-
-func (c *Conn) Write(b []byte) (n int, err error) {
-
-	return c.Conn.Write(b)
-}
-
-func main() {
-	p1, p2 := net.Pipe()
+func TestConn(t *testing.T) {
+	p1, p2, err := netPipe()
+	if err != nil {
+		panic(err)
+	}
 
 	clientKey, err := noise.DH25519.GenerateKeypair(rand.Reader)
 	if err != nil {
@@ -71,25 +72,31 @@ func main() {
 
 	var eg errgroup.Group
 
+	data := make([]byte, 65536)
+	for i := range data {
+		data[i] = byte(i % 256)
+	}
 	eg.Go(func() error {
-		_, err := client.Write(make([]byte, 65536))
+		_, err := client.Write(data)
 		return err
 	})
 	eg.Go(func() error {
 		b := make([]byte, 655360)
 		n, err := server.Read(b)
-		fmt.Printf("%x\n", b[:n])
-		return err
+		if err != nil {
+			return err
+		}
+		m, err := server.Read(b[n:])
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(b[:n+m], data) {
+			panic("failure")
+		}
+		return nil
 	})
 	err = eg.Wait()
 	if err != nil {
 		panic(err)
 	}
-}
-
-func min[T constraints.Ordered](a, b T) T {
-	if a <= b {
-		return a
-	}
-	return b
 }
