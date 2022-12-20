@@ -10,33 +10,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func netPipe() (net.Conn, net.Conn, error) {
-	var eg errgroup.Group
-	var client, server net.Conn
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, nil, err
-	}
-	defer l.Close()
-	eg.Go(func() error {
-		var err error
-		server, err = l.Accept()
-		return err
-	})
-	eg.Go(func() error {
-		var err error
-		client, err = net.Dial(l.Addr().Network(), l.Addr().String())
-		return err
-	})
-	err = eg.Wait()
-	return client, server, err
-}
-
 func TestConn(t *testing.T) {
-	p1, p2, err := netPipe()
-	if err != nil {
-		panic(err)
-	}
+	p1, p2 := net.Pipe()
 
 	clientKey, err := noise.DH25519.GenerateKeypair(rand.Reader)
 	if err != nil {
