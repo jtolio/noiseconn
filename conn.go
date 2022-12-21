@@ -8,14 +8,13 @@ import (
 
 	"github.com/flynn/noise"
 	"github.com/zeebo/errs"
-	"golang.org/x/exp/constraints"
 )
 
 const HeaderByte = 0x80
 
 // TODO(jt): this code is not 0-RTT for initial payloads larger than
-// 65535 bytes! to my knowledge this is not a noise requirement, but is
-// a github.com/flynn/noise requirement.
+// 65535 bytes! to my knowledge i don't know if this is actually a noise
+// requirement, but is at least a github.com/flynn/noise requirement.
 
 type Conn struct {
 	net.Conn
@@ -26,6 +25,8 @@ type Conn struct {
 	send, recv       *noise.CipherState
 }
 
+// NewConn wraps an existing net.Conn with encryption provided by
+// noise.Config.
 func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
 	hs, err := noise.NewHandshakeState(config)
 	if err != nil {
@@ -199,6 +200,8 @@ func (c *Conn) writePayload(b []byte) (err error) {
 	return c.writeMsg(out)
 }
 
+// If a Noise handshake is still occurring (or has yet to occur), the
+// data provided to Write will be included in handshake payloads.
 func (c *Conn) Write(b []byte) (n int, err error) {
 	// TODO(jt): breaking up a large buffer for writes simplifies the noise
 	// code, but we really ought to minimize the number of writes to the
@@ -215,9 +218,15 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 	return n, nil
 }
 
-func min[T constraints.Ordered](a, b T) T {
+// HandshakeComplete returns whether a handshake is complete.
+func (c *Conn) HandshakeComplete() bool {
+	return c.hs == nil
+}
+
+func min(a, b int) int {
 	if a <= b {
 		return a
 	}
 	return b
 }
+
