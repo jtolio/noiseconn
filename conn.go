@@ -13,12 +13,13 @@ import (
 const HeaderByte = 0x80
 const flushLimit = 640 * 1024
 
-// TODO(jt): this code is not 0-RTT for initial payloads larger than
-// 65535 bytes! to my knowledge i don't know if this is actually a noise
-// requirement, but is at least a github.com/flynn/noise requirement.
 
-// TODO(jt): read and write cannot be called concurrently during handshake time
-
+// Conn is a net.Conn that implements a framed Noise protocol on top of the
+// underlying net.Conn provided in NewConn. Conn allows for 0-RTT protocols,
+// in the sense that bytes given to Write will be added to handshake
+// payloads. 
+// Read and Write should not be called concurrently until 
+// HandshakeComplete() is true.
 type Conn struct {
 	net.Conn
 	initiator        bool
@@ -33,7 +34,7 @@ type Conn struct {
 var _ net.Conn = (*Conn)(nil)
 
 // NewConn wraps an existing net.Conn with encryption provided by
-// noise.Config.
+// noise.Config. 
 func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
 	hs, err := noise.NewHandshakeState(config)
 	if err != nil {
