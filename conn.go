@@ -11,6 +11,7 @@ import (
 )
 
 const HeaderByte = 0x80
+const flushLimit = 640 * 1024
 
 // TODO(jt): this code is not 0-RTT for initial payloads larger than
 // 65535 bytes! to my knowledge i don't know if this is actually a noise
@@ -247,9 +248,23 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 		}
 		n += l
 		b = b[l:]
+		if len(c.writeMsgBuf) > flushLimit {
+			_, err = c.Conn.Write(c.writeMsgBuf)
+			if err != nil {
+				return n, err
+			}
+			c.writeMsgBuf = c.writeMsgBuf[:0]
+		}
 	}
-	_, err = c.Conn.Write(c.writeMsgBuf)
-	return n, errs.Wrap(err)
+
+	if len(c.writeMsgBuf) > 0 {
+		_, err = c.Conn.Write(c.writeMsgBuf)
+		if err != nil {
+			return n, err
+		}
+		c.writeMsgBuf = c.writeMsgBuf[:0]
+	}
+	return n, nil
 }
 
 // HandshakeComplete returns whether a handshake is complete.
