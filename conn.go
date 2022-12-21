@@ -115,13 +115,24 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 		if err != nil {
 			return 0, err
 		}
-		// TODO(jt): use b directly if b is big enough!
-		// One option is to use b if it's big enough to
-		// hold noise.MaxMsgLen, but another option that
-		// would be neat is to figure out the payload size
-		// from within m. it is also likely that
-		// the payload size is never larger than the
-		// message size and we could use that.
+		if len(b) >= 65535 {
+			// read directly into b, since b has enough room for a noise
+			// payload.
+			// TODO(jt): is this the best way to determine if we can read into
+			// b? we should be able to know without this worst case. i kind of
+			// hate this code.
+			out, err := c.recv.Decrypt(b[:0], nil, c.readMsgBuf)
+			if err != nil {
+				return 0, errs.Wrap(err)
+			}
+			if len(out) > len(b) {
+				panic("whoops")
+			}
+			if len(out) > 0 {
+				return len(out), nil
+			}
+			continue
+		}
 		c.readBuf, err = c.recv.Decrypt(c.readBuf, nil, c.readMsgBuf)
 		if err != nil {
 			return 0, errs.Wrap(err)
@@ -129,6 +140,7 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 		if handleBuffered() {
 			return n, nil
 		}
+
 	}
 }
 
