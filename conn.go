@@ -25,6 +25,8 @@ type Conn struct {
 	send, recv       *noise.CipherState
 }
 
+var _ net.Conn = (*Conn)(nil)
+
 // NewConn wraps an existing net.Conn with encryption provided by
 // noise.Config.
 func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
@@ -201,7 +203,9 @@ func (c *Conn) writePayload(b []byte) (err error) {
 }
 
 // If a Noise handshake is still occurring (or has yet to occur), the
-// data provided to Write will be included in handshake payloads.
+// data provided to Write will be included in handshake payloads. Note that
+// even if the Noise configuration allows for 0-RTT, the request will only be
+// 0-RTT if the request is 65535 bytes or smaller.
 func (c *Conn) Write(b []byte) (n int, err error) {
 	// TODO(jt): breaking up a large buffer for writes simplifies the noise
 	// code, but we really ought to minimize the number of writes to the
@@ -229,4 +233,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-
