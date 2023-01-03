@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 
 	"github.com/flynn/noise"
 	"github.com/zeebo/errs"
@@ -13,17 +14,17 @@ import (
 const HeaderByte = 0x80
 const flushLimit = 640 * 1024
 
-
 // Conn is a net.Conn that implements a framed Noise protocol on top of the
 // underlying net.Conn provided in NewConn. Conn allows for 0-RTT protocols,
 // in the sense that bytes given to Write will be added to handshake
-// payloads. 
-// Read and Write should not be called concurrently until 
+// payloads.
+// Read and Write should not be called concurrently until
 // HandshakeComplete() is true.
 type Conn struct {
 	net.Conn
-	initiator        bool
+	hsMu             sync.Mutex
 	hs               *noise.HandshakeState
+	initiator        bool
 	hsResponsibility bool
 	readMsgBuf       []byte
 	writeMsgBuf      []byte
@@ -34,7 +35,7 @@ type Conn struct {
 var _ net.Conn = (*Conn)(nil)
 
 // NewConn wraps an existing net.Conn with encryption provided by
-// noise.Config. 
+// noise.Config.
 func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
 	hs, err := noise.NewHandshakeState(config)
 	if err != nil {
@@ -75,6 +76,12 @@ func (c *Conn) hsRead() (err error) {
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
+	c.hsMu.Lock()
+	if c.hs == nil {
+		c.hsMu.Unlock()
+	} else {
+		defer c.hsMu.Unlock()
+	}
 	handleBuffered := func() bool {
 		if len(c.readBuf) == 0 {
 			return false
@@ -213,6 +220,12 @@ func (c *Conn) writeHSPayload(b []byte) (sent bool, err error) {
 // even if the Noise configuration allows for 0-RTT, the request will only be
 // 0-RTT if the request is 65535 bytes or smaller.
 func (c *Conn) Write(b []byte) (n int, err error) {
+	c.hsMu.Lock()
+	if c.hs == nil {
+		c.hsMu.Unlock()
+	} else {
+		defer c.hsMu.Unlock()
+	}
 	for c.hs != nil && len(b) > 0 {
 		if !c.hsResponsibility {
 			err = c.hsRead()
@@ -270,6 +283,8 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 
 // HandshakeComplete returns whether a handshake is complete.
 func (c *Conn) HandshakeComplete() bool {
+	c.hsMu.Lock()
+	defer c.hsMu.Unlock()
 	return c.hs == nil
 }
 
