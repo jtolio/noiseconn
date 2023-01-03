@@ -23,6 +23,7 @@ const flushLimit = 640 * 1024
 type Conn struct {
 	net.Conn
 	hsMu             sync.Mutex
+	readBarrier      barrier
 	hs               *noise.HandshakeState
 	initiator        bool
 	hsResponsibility bool
@@ -76,6 +77,9 @@ func (c *Conn) hsRead() (err error) {
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
+	if c.initiator {
+		c.readBarrier.Wait()
+	}
 	c.hsMu.Lock()
 	if c.hs == nil {
 		c.hsMu.Unlock()
@@ -225,6 +229,9 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 		c.hsMu.Unlock()
 	} else {
 		defer c.hsMu.Unlock()
+	}
+	if c.initiator {
+		c.readBarrier.Release()
 	}
 	for c.hs != nil && len(b) > 0 {
 		if !c.hsResponsibility {
