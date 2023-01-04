@@ -50,6 +50,11 @@ func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
 	}, nil
 }
 
+func (c *Conn) Close() error {
+	c.readBarrier.Release()
+	return c.Conn.Close()
+}
+
 func (c *Conn) setCipherStates(cs1, cs2 *noise.CipherState) {
 	if c.initiator {
 		c.send, c.recv = cs1, cs2
