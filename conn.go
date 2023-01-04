@@ -61,6 +61,10 @@ func (c *Conn) setCipherStates(cs1, cs2 *noise.CipherState) {
 	} else {
 		c.send, c.recv = cs2, cs1
 	}
+	if c.send != nil {
+		c.readBarrier.Release()
+		c.hs = nil
+	}
 }
 
 func (c *Conn) hsRead() (err error) {
@@ -75,9 +79,6 @@ func (c *Conn) hsRead() (err error) {
 	}
 	c.setCipherStates(cs1, cs2)
 	c.hsResponsibility = true
-	if c.send != nil {
-		c.hs = nil
-	}
 	return nil
 }
 
@@ -206,22 +207,7 @@ func (c *Conn) hsCreate(out, payload []byte) (_ []byte, err error) {
 	}
 	c.setCipherStates(cs1, cs2)
 	c.hsResponsibility = false
-	if c.send != nil {
-		c.hs = nil
-	}
 	return out, c.frame(out[outlen:], out[outlen+4:])
-}
-
-func (c *Conn) writeHSPayload(b []byte) (sent bool, err error) {
-	if c.hs != nil {
-		c.writeMsgBuf, err = c.hsCreate(c.writeMsgBuf[:0], b)
-		if err != nil {
-			return false, err
-		}
-		_, err = c.Conn.Write(c.writeMsgBuf)
-		return true, errs.Wrap(err)
-	}
-	return false, nil
 }
 
 // If a Noise handshake is still occurring (or has yet to occur), the
@@ -234,9 +220,6 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 		c.hsMu.Unlock()
 	} else {
 		defer c.hsMu.Unlock()
-	}
-	if c.initiator {
-		c.readBarrier.Release()
 	}
 	for c.hs != nil && len(b) > 0 {
 		if !c.hsResponsibility {
