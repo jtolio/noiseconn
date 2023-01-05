@@ -87,10 +87,17 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 		c.readBarrier.Wait()
 	}
 	c.hsMu.Lock()
+	locked := true
+	unlocker := func() {
+		if locked {
+			locked = false
+			c.hsMu.Unlock()
+		}
+	}
 	if c.hs == nil {
-		c.hsMu.Unlock()
+		unlocker()
 	} else {
-		defer c.hsMu.Unlock()
+		defer unlocker()
 	}
 	handleBuffered := func() bool {
 		if len(c.readBuf) == 0 {
@@ -128,6 +135,7 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 			return n, nil
 		}
 	}
+	unlocker()
 
 	for {
 		c.readMsgBuf, err = c.readMsg(c.readMsgBuf[:0])
@@ -217,10 +225,17 @@ func (c *Conn) hsCreate(out, payload []byte) (_ []byte, err error) {
 // 0-RTT if the request is 65535 bytes or smaller.
 func (c *Conn) Write(b []byte) (n int, err error) {
 	c.hsMu.Lock()
+	locked := true
+	unlocker := func() {
+		if locked {
+			locked = false
+			c.hsMu.Unlock()
+		}
+	}
 	if c.hs == nil {
-		c.hsMu.Unlock()
+		unlocker()
 	} else {
-		defer c.hsMu.Unlock()
+		defer unlocker()
 	}
 	for c.hs != nil && len(b) > 0 {
 		if !c.hsResponsibility {
@@ -243,6 +258,7 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 			b = b[l:]
 		}
 	}
+	unlocker()
 
 	c.writeMsgBuf = c.writeMsgBuf[:0]
 	for len(b) > 0 {
