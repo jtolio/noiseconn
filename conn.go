@@ -207,6 +207,7 @@ func (c *Conn) hsCreate(out, payload []byte) (_ []byte, err error) {
 	}
 	c.setCipherStates(cs1, cs2)
 	c.hsResponsibility = false
+	c.readBarrier.Release()
 	return out, c.frame(out[outlen:], out[outlen+4:])
 }
 
