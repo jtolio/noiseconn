@@ -9,15 +9,13 @@ import (
 type Listener struct {
 	net.Listener
 	config noise.Config
+	opts   Options
 }
 
 var _ net.Listener = (*Listener)(nil)
 
 func NewListener(inner net.Listener, config noise.Config) *Listener {
-	return &Listener{
-		Listener: inner,
-		config:   config,
-	}
+	return NewListenerWithOptions(inner, config, Options{})
 }
 
 func (l *Listener) Accept() (net.Conn, error) {
@@ -25,5 +23,13 @@ func (l *Listener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewConn(conn, l.config)
+	return NewConnWithOptions(conn, l.config, l.opts)
+}
+
+func NewListenerWithOptions(inner net.Listener, config noise.Config, opts Options) *Listener {
+	return &Listener{
+		Listener: inner,
+		config:   config,
+		opts:     opts,
+	}
 }

@@ -40,6 +40,7 @@ type Debouncer struct {
 // NewDebouncer makes a Debouncer. Messages will only be stored in memory
 // up until maxAge time, and once the same message has been received
 // maxCount times it will be forgotten as well.
+// maxCount is ignored when <= 0.
 func NewDebouncer(maxAge time.Duration, maxCount int) *Debouncer {
 	return &Debouncer{
 		maxAge:   maxAge,
@@ -60,7 +61,7 @@ func (d *Debouncer) ResponderFirstMessageValidator(addr net.Addr, message []byte
 
 	if n, found := d.lookup[hash]; found {
 		n.Value.count++
-		if n.Value.count >= d.maxCount {
+		if n.Value.count >= d.maxCount && d.maxCount > 0 {
 			delete(d.lookup, n.Value.messageHash)
 			d.entries.Remove(n)
 		}
