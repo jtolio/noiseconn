@@ -14,6 +14,19 @@ import (
 const HeaderByte = 0x80
 const flushLimit = 640 * 1024
 
+// MessageInspector is a callback that gets informed about unparsed
+// Noise messages.
+type MessageInspector func(addr net.Addr, message []byte) error
+
+type Options struct {
+	// ResponderFirstMessageValidator will be called with the first
+	// received Noise message (unparsed) for a responder, if set. It is
+	// not considered for initiators or for any subsequent packet.
+	// This can be used for analyzing message replay and other
+	// issues, but is not safe for use as replay attack prevention.
+	ResponderFirstMessageValidator MessageInspector
+}
+
 // Conn is a net.Conn that implements a framed Noise protocol on top of the
 // underlying net.Conn provided in NewConn. Conn allows for 0-RTT protocols,
 // in the sense that bytes given to Write will be added to handshake
@@ -32,6 +45,7 @@ type Conn struct {
 	writeMsgBuf      []byte
 	readBuf          []byte
 	send, recv       *noise.CipherState
+	rfmValidate       MessageInspector
 }
 
 var _ net.Conn = (*Conn)(nil)
@@ -39,6 +53,12 @@ var _ net.Conn = (*Conn)(nil)
 // NewConn wraps an existing net.Conn with encryption provided by
 // noise.Config.
 func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
+	return NewConnWithOptions(conn, config, Options{})
+}
+
+// NewConn wraps an existing net.Conn with encryption provided by
+// noise.Config and options provided by Options.
+func NewConnWithOptions(conn net.Conn, config noise.Config, opts Options) (*Conn, error) {
 	hs, err := noise.NewHandshakeState(config)
 	if err != nil {
 		return nil, errs.Wrap(err)
@@ -48,6 +68,7 @@ func NewConn(conn net.Conn, config noise.Config) (*Conn, error) {
 		hs:               hs,
 		initiator:        config.Initiator,
 		hsResponsibility: config.Initiator,
+		rfmValidate:       opts.ResponderFirstMessageValidator,
 	}, nil
 }
 
@@ -81,6 +102,11 @@ func (c *Conn) hsRead() (err error) {
 	}
 	c.setCipherStates(cs1, cs2)
 	c.hsResponsibility = true
+	if c.rfmValidate != nil {
+		err = c.rfmValidate(c.Conn.RemoteAddr(), c.readMsgBuf)
+		c.rfmValidate = nil
+		return errs.Wrap(err)
+	}
 	return nil
 }
 
@@ -214,6 +240,10 @@ func (c *Conn) hsCreate(out, payload []byte) (_ []byte, err error) {
 	out, cs1, cs2, err = c.hs.WriteMessage(append(out, make([]byte, 4)...), payload)
 	if err != nil {
 		return nil, errs.Wrap(err)
+	}
+	if c.rfmValidate != nil {
+		// only applies to responders, not initiators.
+		c.rfmValidate = nil
 	}
 	c.setCipherStates(cs1, cs2)
 	c.hsResponsibility = false
