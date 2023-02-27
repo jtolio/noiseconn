@@ -22,8 +22,10 @@ type Options struct {
 	// ResponderFirstMessageValidator will be called with the first
 	// received Noise message (unparsed) for a responder, if set. It is
 	// not considered for initiators or for any subsequent packet.
-	// This can be used for analyzing message replay and other
-	// issues, but is not safe for use as replay attack prevention.
+	// This can be used for analyzing message replay, debouncing
+	// messages deliberately sent twice
+	// (see github.com/jtolio/noiseconn/debounce), and other issues,
+	// but is not safe for use as replay attack prevention.
 	ResponderFirstMessageValidator MessageInspector
 }
 
