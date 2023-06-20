@@ -3,6 +3,7 @@ package noiseconn
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"net"
 	"testing"
 
@@ -15,11 +16,11 @@ func TestConn(t *testing.T) {
 
 	clientKey, err := noise.DH25519.GenerateKeypair(rand.Reader)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	serverKey, err := noise.DH25519.GenerateKeypair(rand.Reader)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	client, err := NewConn(p1, noise.Config{
@@ -30,7 +31,7 @@ func TestConn(t *testing.T) {
 		PeerStatic:    serverKey.Public,
 	})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	defer client.Close()
 
@@ -41,7 +42,7 @@ func TestConn(t *testing.T) {
 		StaticKeypair: serverKey,
 	})
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	defer server.Close()
 
@@ -66,12 +67,12 @@ func TestConn(t *testing.T) {
 			return err
 		}
 		if !bytes.Equal(b[:n+m], data) {
-			panic("failure")
+			return errors.New("failure")
 		}
 		return nil
 	})
 	err = eg.Wait()
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 }
